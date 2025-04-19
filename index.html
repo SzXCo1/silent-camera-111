@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>サイレントカメラ</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      background: #000;
+      font-family: 'Helvetica Neue', sans-serif;
+      color: #fff;
+      overflow: hidden;
+    }
+
+    #video {
+      width: 100vw;
+      height: 100vh;
+      object-fit: cover;
+    }
+
+    #controls, #zoomSlider {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 2;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    select, button, input[type=range] {
+      font-size: 16px;
+      padding: 10px 16px;
+      border-radius: 8px;
+      border: none;
+      background: rgba(255, 255, 255, 0.2);
+      color: white;
+      backdrop-filter: blur(4px);
+      cursor: pointer;
+    }
+
+    input[type=range] {
+      width: 200px;
+    }
+
+    #photoPreview {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      max-width: 80vw;
+      display: none;
+      z-index: 3;
+      border-radius: 12px;
+      box-shadow: 0 0 20px rgba(0,0,0,0.5);
+    }
+
+    #buttonsContainer {
+      position: absolute;
+      bottom: 100px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: none;
+      gap: 10px;
+      z-index: 3;
+    }
+
+    #buttonsContainer button {
+      padding: 12px 24px;
+      font-size: 16px;
+      border-radius: 10px;
+      border: none;
+      cursor: pointer;
+    }
+
+    #saveBtn {
+      background: #00c853;
+      color: white;
+    }
+
+    #discardBtn {
+      background: #ff5252;
+      color: white;
+    }
+
+    #zoomSlider {
+      bottom: 70px;
+    }
+  </style>
+</head>
+<body>
+
+  <video id="video" autoplay playsinline></video>
+  <canvas id="canvas" style="display:none;"></canvas>
+  <img id="photoPreview">
+  <div id="controls">
+    <select id="cameraSelect">
+      <option value="user">内カメ</option>
+      <option value="environment" selected>外カメ</option>
+    </select>
+    <button id="captureBtn">撮影</button>
+  </div>
+
+  <input type="range" id="zoomSlider" style="display:none;">
+  
+  <div id="buttonsContainer">
+    <a id="downloadLink" download="photo.png">
+      <button id="saveBtn">保存</button>
+    </a>
+    <button id="discardBtn">破棄</button>
+  </div>
+
+  <script>
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const preview = document.getElementById('photoPreview');
+    const captureBtn = document.getElementById('captureBtn');
+    const cameraSelect = document.getElementById('cameraSelect');
+    const zoomSlider = document.getElementById('zoomSlider');
+    const buttonsContainer = document.getElementById('buttonsContainer');
+    const discardBtn = document.getElementById('discardBtn');
+    const downloadLink = document.getElementById('downloadLink');
+
+    let stream = null;
+    let track = null;
+
+    async function startCamera(facingMode = 'environment') {
+      if (stream) {
+        stream.getTracks().forEach(t => t.stop());
+      }
+
+      const constraints = {
+        video: { facingMode },
+        audio: false
+      };
+
+      try {
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+        video.srcObject = stream;
+        track = stream.getVideoTracks()[0];
+
+        const capabilities = track.getCapabilities();
+        if ('zoom' in capabilities) {
+          const settings = track.getSettings();
+          zoomSlider.min = capabilities.zoom.min;
+          zoomSlider.max = capabilities.zoom.max;
+          zoomSlider.step = capabilities.zoom.step || 0.1;
+          zoomSlider.value = settings.zoom || capabilities.zoom.min;
+          zoomSlider.style.display = 'block';
+
+          zoomSlider.oninput = () => {
+            track.applyConstraints({ advanced: [{ zoom: parseFloat(zoomSlider.value) }] });
+          };
+        } else {
+          zoomSlider.style.display = 'none';
+        }
+
+      } catch (err) {
+        alert('カメラにアクセスできませんでした。\nHTTPS接続で開いてください。\n' + err.message);
+      }
+    }
+
+    captureBtn.onclick = () => {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      const dataUrl = canvas.toDataURL();
+      preview.src = dataUrl;
+      preview.style.display = 'block';
+      downloadLink.href = dataUrl;
+      buttonsContainer.style.display = 'flex';
+    };
+
+    discardBtn.onclick = () => {
+      preview.style.display = 'none';
+      buttonsContainer.style.display = 'none';
+    };
+
+    cameraSelect.onchange = () => {
+      startCamera(cameraSelect.value);
+      preview.style.display = 'none';
+      buttonsContainer.style.display = 'none';
+    };
+
+    window.onload = () => {
+      if (location.protocol !== 'https:') {
+        alert("⚠️ カメラの使用にはHTTPSが必要です。ローカルで動かす場合は localhost を使ってください。");
+      }
+      startCamera();
+    };
+  </script>
+
+</body>
+</html>
